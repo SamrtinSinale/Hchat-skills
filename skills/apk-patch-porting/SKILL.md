@@ -46,12 +46,33 @@ description: "把某个 Android APK 的定制补丁（smali 层）从旧版本�
 - **模块运行期日志**：`/data/adb/lspd/log/`（modules/verbose 两个文件），先按关键词计数再取上下文。
 - **现象反推**：从“哪个功能坏”回溯到“哪个键名/寄存器/字符串被破坏”，再去代码里验证该寄存器在插入点后是否被读。
 
+## 一条命令（hchat_port.py）
+
+Hchat 场景已经全自动，**输入只要新版官方 APK**：
+
+```bash
+python3 scripts/hchat_port.py <新版官方.apk> [--work /workspace/port_out] [--out 输出.apk]
+```
+
+它按顺序做：解码 → 按锚点自动推导全部符号映射（构建类 / 数据类 / 配置类 / 发布类 /
+搜索索引类 / 快速已读类 / 设置 UI 类 / 行点击接口 / Compose / lambda 接口 / 包装类 / Unit /
+空判断 / 列表构造 + 8 个图标接管点）→ 复制 `assets/eta_templates/` 里 14 个 `Eta*` 类并替换占位符
+→ 落 8 处图标接管与其余 7 类补丁 → 汇编（`fail=0` 才继续）→ 只替换 `classes.dex` 重打包
+→ 反解校验（14 类 / 8 接管点 / cln / talker 键）→ 打印 sha256 与完整符号映射。
+
+回归基准（6.5.0）：手工移植与脚本产出**逐字节一致** —— APK `8d30f1cb…`、dex `1f32cf8a…`。
+
+锚点对不上会明确报错（哪个锚点、几个候选），不会猜着改。若新版方法结构变了，先按报错补锚点，
+再对 3 个插入点跑 `reg_free.py` 复核寄存器活跃性。
+
 ## 资源
 
 - `scripts/semantic_diff.py`：两个 smali 文件的语义 diff（去行号噪音、解码 `\uXXXX`）。
 - `scripts/reg_free.py`：给定文件与行号，列出所在方法内各寄存器在插入点是否空闲。
 - `scripts/repack_apk.py`：只替换 `classes.dex` 的重打包。
 - `scripts/BuildDex.java` + `scripts/README.md`：smali → dex 全量汇编及编译命令。
+- `scripts/hchat_port.py`：**全自动移植**（一条命令，Hchat 场景）。
+- `assets/eta_templates/`：14 个 `Eta*` 类模板，用 `{{SETTINGS_UI}}` 之类占位符，由脚本替换。
 - `references/case-hchat-647.md`：一次真实移植的完整案例（含 v15 覆盖事故复盘）。
 - `references/hchat-porting-playbook.md`：Hchat 场景的默认目录、自动发现规则、补丁清单、符号映射与交付模板（一句话触发时按它补齐输入）。
 
